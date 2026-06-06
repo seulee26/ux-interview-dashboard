@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UX Interview Insights Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">UX</div>
+          <div>
+            <p class="eyebrow">Interview Analysis</p>
+            <h1>UX Insights</h1>
+          </div>
+        </div>
+
+        <section class="panel upload-panel">
+          <label class="upload-zone" for="fileInput">
+            <input id="fileInput" type="file" accept=".csv,.json,.txt" />
+            <span class="upload-icon">+</span>
+            <strong>CSV or JSON</strong>
+            <span>Drop your interview export here</span>
+          </label>
+          <button class="ghost-button" id="loadDemoButton" type="button">Load demo data</button>
+          <p class="microcopy">
+            Expected columns: participant, segment, sentiment, theme, severity, quote, score.
+          </p>
+        </section>
+
+        <section class="panel filters-panel">
+          <div class="panel-title">
+            <h2>Filters</h2>
+            <button class="text-button" id="resetFiltersButton" type="button">Reset</button>
+          </div>
+
+          <label class="field">
+            <span>Search</span>
+            <input id="searchInput" type="search" placeholder="theme, quote, segment..." />
+          </label>
+
+          <label class="field">
+            <span>Segment</span>
+            <select id="segmentFilter"></select>
+          </label>
+
+          <label class="field">
+            <span>Sentiment</span>
+            <select id="sentimentFilter">
+              <option value="all">All</option>
+              <option value="positive">Positive</option>
+              <option value="neutral">Neutral</option>
+              <option value="negative">Negative</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Minimum severity</span>
+            <select id="severityFilter">
+              <option value="0">Any</option>
+              <option value="1">1 - Low</option>
+              <option value="2">2</option>
+              <option value="3">3 - Medium</option>
+              <option value="4">4</option>
+              <option value="5">5 - High</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="panel notes-panel">
+          <h2>What this dashboard answers</h2>
+          <ul>
+            <li>What themes repeat most often?</li>
+            <li>Where sentiment is strongest or weakest?</li>
+            <li>Which issues look most severe?</li>
+            <li>What quotes should go into the next readout?</li>
+          </ul>
+        </section>
+      </aside>
+
+      <main class="content">
+        <header class="hero panel">
+          <div>
+            <p class="eyebrow">UX Research Readout</p>
+            <h2>Interview results at a glance</h2>
+            <p class="hero-copy">
+              A compact dashboard for synthesizing user interviews into themes, sentiment, severity, and evidence.
+            </p>
+          </div>
+          <div class="hero-meta">
+            <div class="meta-card">
+              <span class="meta-label">Dataset</span>
+              <strong id="datasetLabel">Demo sample</strong>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Last updated</span>
+              <strong id="updatedLabel">--</strong>
+            </div>
+          </div>
+        </header>
+
+        <section class="kpis" id="kpiGrid"></section>
+
+        <section class="grid-2">
+          <article class="panel chart-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Themes</p>
+                <h2>Recurring pain points</h2>
+              </div>
+              <span class="chip" id="themeCountChip">0 themes</span>
+            </div>
+            <div id="themeChart" class="bar-chart"></div>
+          </article>
+
+          <article class="panel chart-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Sentiment</p>
+                <h2>Average sentiment by segment</h2>
+              </div>
+              <span class="chip" id="segmentCountChip">0 segments</span>
+            </div>
+            <div id="segmentChart" class="bar-chart"></div>
+          </article>
+        </section>
+
+        <section class="grid-2">
+          <article class="panel insight-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Insights</p>
+                <h2>What stands out</h2>
+              </div>
+            </div>
+            <div class="insight-list" id="insightList"></div>
+          </article>
+
+          <article class="panel quote-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Evidence</p>
+                <h2>Representative quotes</h2>
+              </div>
+            </div>
+            <div id="quoteList" class="quote-list"></div>
+          </article>
+        </section>
+
+        <section class="panel table-panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Detail</p>
+              <h2>Interview rows</h2>
+            </div>
+            <span class="chip" id="rowCountChip">0 rows</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Participant</th>
+                  <th>Segment</th>
+                  <th>Theme</th>
+                  <th>Sentiment</th>
+                  <th>Severity</th>
+                  <th>Score</th>
+                  <th>Quote</th>
+                </tr>
+              </thead>
+              <tbody id="rowTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
