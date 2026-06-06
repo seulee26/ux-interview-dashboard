@@ -103,6 +103,47 @@
 
         <section class="kpis" id="kpiGrid"></section>
 
+        <section class="panel agent-panel" aria-labelledby="agentTitle">
+          <div class="agent-header">
+            <div>
+              <p class="eyebrow">Research Agent</p>
+              <h2 id="agentTitle">Ask the interview data</h2>
+            </div>
+            <span class="chip" id="agentScopeChip">Filtered view</span>
+          </div>
+
+          <div class="agent-layout">
+            <div class="agent-prompts" aria-label="Suggested questions">
+              <button class="prompt-button" type="button" data-prompt="Summarize the key UX issues.">
+                Summarize issues
+              </button>
+              <button class="prompt-button" type="button" data-prompt="Which theme should we prioritize first?">
+                Prioritize theme
+              </button>
+              <button class="prompt-button" type="button" data-prompt="Show the most useful quotes.">
+                Pull quotes
+              </button>
+              <button class="prompt-button" type="button" data-prompt="What should the product team do next?">
+                Recommend actions
+              </button>
+            </div>
+
+            <div class="chat-surface">
+              <div class="chat-log" id="chatLog" aria-live="polite"></div>
+              <form class="chat-form" id="chatForm">
+                <label class="sr-only" for="chatInput">Ask the research agent</label>
+                <input
+                  id="chatInput"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Ask about themes, sentiment, severity, quotes, or next steps..."
+                />
+                <button class="send-button" type="submit">Send</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <section class="grid-2">
           <article class="panel chart-panel">
             <div class="panel-title">

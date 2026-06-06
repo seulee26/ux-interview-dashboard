@@ -76,6 +76,13 @@ const SAMPLE_DATA = [
 const state = {
   data: SAMPLE_DATA.map(normalizeRow),
   sourceLabel: "Demo sample",
+  chatMessages: [
+    {
+      role: "agent",
+      text:
+        "Ask me what the interviews are saying. I can summarize issues, rank themes, pull quotes, and suggest next steps from the current filtered view.",
+    },
+  ],
   filters: {
     search: "",
     segment: "all",
@@ -103,6 +110,10 @@ const els = {
   themeCountChip: document.getElementById("themeCountChip"),
   segmentCountChip: document.getElementById("segmentCountChip"),
   rowCountChip: document.getElementById("rowCountChip"),
+  agentScopeChip: document.getElementById("agentScopeChip"),
+  chatLog: document.getElementById("chatLog"),
+  chatForm: document.getElementById("chatForm"),
+  chatInput: document.getElementById("chatInput"),
 };
 
 els.fileInput.addEventListener("change", handleFileUpload);
@@ -123,6 +134,10 @@ els.sentimentFilter.addEventListener("change", (event) => {
 els.severityFilter.addEventListener("change", (event) => {
   state.filters.severity = Number(event.target.value);
   render();
+});
+els.chatForm.addEventListener("submit", handleChatSubmit);
+document.querySelectorAll(".prompt-button").forEach((button) => {
+  button.addEventListener("click", () => askAgent(button.dataset.prompt || ""));
 });
 
 init();
@@ -357,6 +372,7 @@ function render() {
   renderInsights(metrics);
   renderQuotes(filtered, metrics);
   renderTable(filtered);
+  renderChat(filtered);
   updateChips(metrics);
 }
 
@@ -638,6 +654,221 @@ function renderTable(rows) {
 function updateChips(metrics) {
   els.themeCountChip.textContent = `${metrics.themeCount} themes`;
   els.segmentCountChip.textContent = `${metrics.segmentStats.length} segments`;
+  els.agentScopeChip.textContent = `${metrics.rows.length} rows in scope`;
+}
+
+function handleChatSubmit(event) {
+  event.preventDefault();
+  const question = els.chatInput.value.trim();
+  if (!question) return;
+  askAgent(question);
+}
+
+function askAgent(question) {
+  const filtered = applyFilters(state.data, state.filters);
+  const answer = buildAgentAnswer(question, filtered);
+  state.chatMessages.push({ role: "user", text: question });
+  state.chatMessages.push({ role: "agent", text: answer });
+  els.chatInput.value = "";
+  renderChat(filtered);
+}
+
+function renderChat(filteredRows) {
+  els.chatLog.innerHTML = state.chatMessages
+    .map((message) => {
+      return `
+        <div class="chat-message ${message.role}">
+          <div class="chat-bubble">${formatAgentText(message.text)}</div>
+        </div>
+      `;
+    })
+    .join("");
+  els.chatLog.scrollTop = els.chatLog.scrollHeight;
+
+  if (!filteredRows.length && state.chatMessages.length === 1) {
+    els.chatLog.innerHTML += `
+      <div class="chat-message agent">
+        <div class="chat-bubble">No interview rows match the current filters yet. Reset filters or upload a file to start asking questions.</div>
+      </div>
+    `;
+  }
+}
+
+function buildAgentAnswer(question, rows) {
+  if (!rows.length) {
+    return "No rows match the current filters, so I do not have interview evidence to analyze. Reset filters or upload a broader dataset.";
+  }
+
+  const intent = question.toLowerCase();
+  const locale = /[가-힣]/.test(question) ? "ko" : "en";
+  const metrics = calculateMetrics(rows);
+
+  if (matchesAny(intent, ["quote", "quotes", "evidence", "verbatim", "인용", "인용문", "근거", "증거", "발화"])) {
+    return buildQuoteAnswer(rows, locale);
+  }
+
+  if (matchesAny(intent, ["prioritize", "priority", "first", "important", "severe", "risk", "우선", "우선순위", "먼저", "중요", "심각", "리스크"])) {
+    return buildPriorityAnswer(rows, metrics, locale);
+  }
+
+  if (matchesAny(intent, ["next", "action", "recommend", "roadmap", "product team", "do next", "다음", "액션", "추천", "해야", "제품팀", "기획"])) {
+    return buildActionAnswer(rows, metrics, locale);
+  }
+
+  if (matchesAny(intent, ["sentiment", "positive", "negative", "segment", "persona", "감정", "긍정", "부정", "세그먼트", "페르소나"])) {
+    return buildSentimentAnswer(metrics, locale);
+  }
+
+  if (matchesAny(intent, ["theme", "themes", "pain", "issue", "problem", "summary", "summarize", "overview", "테마", "주제", "불편", "이슈", "문제", "요약", "정리"])) {
+    return buildSummaryAnswer(metrics, locale);
+  }
+
+  return buildDefaultAnswer(metrics, locale);
+}
+
+function buildSummaryAnswer(metrics, locale = "en") {
+  const topThemes = metrics.themeStats
+    .slice(0, 3)
+    .map((theme, index) => `${index + 1}. ${theme.name} (${theme.count} mentions)`)
+    .join("\n");
+  const score = metrics.averageScore === null ? "no score data" : `${metrics.averageScore.toFixed(1)} average score`;
+
+  if (locale === "ko") {
+    const koreanScore = metrics.averageScore === null ? "점수 데이터 없음" : `평균 점수 ${metrics.averageScore.toFixed(1)}`;
+    const koreanThemes = metrics.themeStats
+      .slice(0, 3)
+      .map((theme, index) => `${index + 1}. ${theme.name} (${theme.count}건)`)
+      .join("\n");
+
+    return [
+      `현재 범위에는 참여자 ${metrics.participantCount}명, 테마 ${metrics.themeCount}개, 심각도 높은 이슈 ${metrics.severeIssues}건이 있습니다.`,
+      `상위 테마:\n${koreanThemes || "아직 뚜렷한 테마가 없습니다."}`,
+      `전체 신호는 ${koreanScore}, 순감정은 ${formatNetSentiment(metrics.sentimentCounts)}입니다.`,
+    ].join("\n\n");
+  }
+
+  return [
+    `I see ${metrics.participantCount} participants, ${metrics.themeCount} themes, and ${metrics.severeIssues} severe issue rows in this view.`,
+    `Top themes:\n${topThemes || "No clear themes yet."}`,
+    `The health signal is ${score}, with net sentiment at ${formatNetSentiment(metrics.sentimentCounts)}.`,
+  ].join("\n\n");
+}
+
+function buildPriorityAnswer(rows, metrics, locale = "en") {
+  const candidates = metrics.themeStats
+    .map((theme) => {
+      const themeRows = rows.filter((row) => row.theme === theme.name);
+      const severeCount = themeRows.filter((row) => row.severity >= 4).length;
+      const negativeCount = themeRows.filter((row) => row.sentiment === "negative").length;
+      const avgSeverity = themeRows.reduce((sum, row) => sum + row.severity, 0) / themeRows.length;
+      return {
+        ...theme,
+        severeCount,
+        negativeCount,
+        avgSeverity,
+        priorityScore: theme.count + severeCount * 2 + negativeCount * 1.5 + avgSeverity,
+      };
+    })
+    .sort((a, b) => b.priorityScore - a.priorityScore || b.count - a.count);
+
+  const top = candidates[0];
+  if (!top) return locale === "ko" ? "아직 우선순위를 정할 만큼 테마 근거가 충분하지 않습니다." : "I do not see enough theme evidence to prioritize yet.";
+
+  const supportingQuote = rows.find((row) => row.theme === top.name && row.quote && row.severity >= 4) || rows.find((row) => row.theme === top.name && row.quote);
+
+  if (locale === "ko") {
+    return [
+      `먼저 볼 테마는 ${top.name}입니다.`,
+      `이유: 언급 ${top.count}건, 심각도 높은 행 ${top.severeCount}건, 부정 응답 ${top.negativeCount}건, 평균 심각도 ${top.avgSeverity.toFixed(1)}입니다.`,
+      supportingQuote ? `근거: "${supportingQuote.quote}" - ${supportingQuote.participant}, ${supportingQuote.segment}` : "근거: 이 테마에 연결된 quote가 아직 없습니다.",
+    ].join("\n\n");
+  }
+
+  return [
+    `I would prioritize ${top.name} first.`,
+    `Why: ${top.count} mentions, ${top.severeCount} severe rows, ${top.negativeCount} negative rows, and ${top.avgSeverity.toFixed(1)} average severity.`,
+    supportingQuote ? `Evidence: "${supportingQuote.quote}" - ${supportingQuote.participant}, ${supportingQuote.segment}` : "Evidence: no quote is available for that theme yet.",
+  ].join("\n\n");
+}
+
+function buildActionAnswer(rows, metrics, locale = "en") {
+  const priority = metrics.themeStats[0];
+  const severeRows = rows.filter((row) => row.severity >= 4);
+  const weakSegment = metrics.worstSegment;
+
+  const actions =
+    locale === "ko"
+      ? [
+          priority ? `${priority.name}에 대한 집중 디자인 패스를 먼저 진행하세요. 현재 범위에서 가장 반복되는 테마입니다.` : "제품 작업을 정하기 전에 인터뷰 테마를 먼저 정규화하세요.",
+          severeRows.length
+            ? `심각도 높은 ${severeRows.length}건을 짧은 escalation 목록으로 만들고, 각 항목의 담당자를 확인하세요.`
+            : "다음 synthesis에서 작은 사용성 개선과 실제 blocker를 분리하세요.",
+          weakSegment ? `${weakSegment.name} 경험을 따로 리뷰하세요. 감정 신호가 가장 약합니다 (${weakSegment.avgSentiment.toFixed(2)}).` : "문제가 어디에 집중되는지 보이도록 segment 라벨을 보강하세요.",
+        ]
+      : [
+          priority ? `Run a focused design pass on ${priority.name}; it is the most repeated theme in this view.` : "Normalize the interview themes before planning product work.",
+          severeRows.length
+            ? `Create a short escalation list from the ${severeRows.length} severe rows, then check whether each has a clear owner.`
+            : "Use the next synthesis pass to separate small usability polish from true blockers.",
+          weakSegment ? `Review the experience for ${weakSegment.name}; it has the weakest sentiment signal (${weakSegment.avgSentiment.toFixed(2)}).` : "Add segment labels so the team can see where the problem is concentrated.",
+        ];
+
+  const title = locale === "ko" ? "추천 다음 액션" : "Recommended next steps";
+  return `${title}:\n${actions.map((action, index) => `${index + 1}. ${action}`).join("\n")}`;
+}
+
+function buildQuoteAnswer(rows, locale = "en") {
+  const quotes = rows
+    .filter((row) => row.quote)
+    .sort((a, b) => b.severity - a.severity || sentimentValue(a.sentiment) - sentimentValue(b.sentiment))
+    .slice(0, 4);
+
+  if (!quotes.length) return locale === "ko" ? "아직 이 데이터셋에서 quote 텍스트를 찾지 못했습니다." : "I do not see quote text in this dataset yet.";
+
+  const title = locale === "ko" ? "쓸 만한 인용문" : "Useful quotes";
+  return `${title}:\n${quotes
+    .map((row, index) => `${index + 1}. "${row.quote}" - ${row.participant}, ${row.segment}, ${row.theme}, severity ${row.severity}`)
+    .join("\n")}`;
+}
+
+function buildSentimentAnswer(metrics, locale = "en") {
+  const strongest = metrics.bestSegment;
+  const weakest = metrics.worstSegment;
+  const counts = metrics.sentimentCounts;
+
+  if (locale === "ko") {
+    return [
+      `감정 분포: 긍정 ${counts.positive}건, 중립 ${counts.neutral}건, 부정 ${counts.negative}건입니다.`,
+      strongest ? `가장 강한 세그먼트: ${strongest.name} (평균 감정 ${strongest.avgSentiment.toFixed(2)}).` : "가장 강한 세그먼트: 아직 세그먼트 데이터가 충분하지 않습니다.",
+      weakest ? `가장 약한 세그먼트: ${weakest.name} (평균 감정 ${weakest.avgSentiment.toFixed(2)}).` : "가장 약한 세그먼트: 아직 세그먼트 데이터가 충분하지 않습니다.",
+    ].join("\n\n");
+  }
+
+  return [
+    `Sentiment mix: ${counts.positive} positive, ${counts.neutral} neutral, ${counts.negative} negative.`,
+    strongest ? `Strongest segment: ${strongest.name} (${strongest.avgSentiment.toFixed(2)} average sentiment).` : "Strongest segment: not enough segment data yet.",
+    weakest ? `Weakest segment: ${weakest.name} (${weakest.avgSentiment.toFixed(2)} average sentiment).` : "Weakest segment: not enough segment data yet.",
+  ].join("\n\n");
+}
+
+function buildDefaultAnswer(metrics, locale = "en") {
+  if (locale === "ko") {
+    return [
+      "이 데이터셋은 몇 가지 방향으로 도와드릴 수 있습니다.",
+      buildSummaryAnswer(metrics, "ko"),
+      "예를 들어 어떤 이슈를 먼저 고칠지, quote를 뽑아달라고 하거나, 세그먼트별 감정 요약과 다음 액션을 물어볼 수 있습니다.",
+    ].join("\n\n");
+  }
+
+  return ["I can help with this dataset from a few angles.", buildSummaryAnswer(metrics), "Try asking: which issue should we fix first, show quotes, summarize sentiment by segment, or recommend next actions."].join("\n\n");
+}
+
+function matchesAny(text, terms) {
+  return terms.some((term) => text.includes(term));
+}
+
+function formatAgentText(text) {
+  return escapeHtml(text).replace(/\n/g, "<br>");
 }
 
 function emptyState() {
